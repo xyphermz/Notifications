@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thử Nghiệm Thông Báo (Notifications)</title>
+    <!-- Cấu hình PWA (theme color, manifest) -->
+    <meta name="theme-color" content="#4f46e5"/>
+    <link rel="manifest" href="manifest.json"> 
+    
+    <!-- Tải Tailwind CSS để tạo giao diện đẹp và đáp ứng -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Thiết lập font Inter */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; 
+            min-height: 100vh;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+    <div id="app" class="w-full max-w-lg p-6 bg-white shadow-2xl rounded-xl space-y-6">
+        <h1 class="text-3xl font-bold text-center text-indigo-700">Trình Thử Thông Báo Web (PWA)</h1>
+
+        <div id="status-card" class="p-4 rounded-lg shadow-inner flex items-center justify-between">
+            <span class="font-semibold text-gray-700">Trạng thái hiện tại:</span>
+            <span id="notification-status" class="px-3 py-1 text-sm font-medium rounded-full">Đang tải...</span>
+        </div>
+
+        <button id="request-permission-btn" class="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 disabled:opacity-50" onclick="requestNotificationPermission()">
+            1. Yêu cầu Quyền Gửi Thông Báo
+        </button>
+
+        <div id="notification-form" class="space-y-4 border-t pt-4 border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-800">2. Tạo Thông Báo Mới</h2>
+
+            <div>
+                <label for="title-input" class="block text-sm font-medium text-gray-700 mb-1">Tiêu đề Thông báo (Title):</label>
+                <input type="text" id="title-input" value="Thông báo mới từ App" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" placeholder="Ví dụ: Lời nhắc quan trọng">
+            </div>
+
+            <div>
+                <label for="body-input" class="block text-sm font-medium text-gray-700 mb-1">Nội dung (Body):</label>
+                <textarea id="body-input" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" rows="3" placeholder="Ví dụ: Đã đến giờ nghỉ giải lao, hãy thư giãn một chút!"></textarea>
+            </div>
+            
+            <div>
+                <label for="icon-input" class="block text-sm font-medium text-gray-700 mb-1">URL Icon (Tùy chọn):</label>
+                <input type="url" id="icon-input" value="https://placehold.co/48x48/5B7FB9/ffffff?text=App" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" placeholder="URL hình ảnh nhỏ">
+            </div>
+            
+            <button id="send-notification-btn" class="w-full py-3 bg-emerald-500 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-600 transition duration-300 disabled:opacity-50" onclick="sendNotification()">
+                Gửi Thông Báo Ngay!
+            </button>
+        </div>
+
+        <div id="message-box" class="hidden p-4 text-sm rounded-lg" role="alert"></div>
+
+    </div>
+
+    <script>
+        // --- KHỞI TẠO CÁC BIẾN & THAM CHIẾU DOM ---
+        let currentPermission = 'default';
+        const statusEl = document.getElementById('notification-status');
+        const statusCard = document.getElementById('status-card');
+        const requestBtn = document.getElementById('request-permission-btn');
+        const sendBtn = document.getElementById('send-notification-btn');
+        const messageBox = document.getElementById('message-box');
+
+        /**
+         * Cập nhật trạng thái quyền thông báo trên UI
+         */
+        function updateUIStatus() {
+            if (!('Notification' in window)) {
+                currentPermission = 'unsupported';
+                statusEl.textContent = 'Không được hỗ trợ';
+                statusEl.className = 'px-3 py-1 text-sm font-medium rounded-full bg-red-100 text-red-800';
+                statusCard.className = statusCard.className.replace(/shadow-inner/, 'shadow-none border border-red-300');
+                requestBtn.disabled = true;
+                sendBtn.disabled = true;
+                showMessage("Rất tiếc, trình duyệt của bạn không hỗ trợ Web Notifications.", 'error');
+                return;
+            }
+
+            currentPermission = Notification.permission;
+            
+            switch (currentPermission) {
+                case 'granted':
+                    statusEl.textContent = 'Đã cho phép';
+                    statusEl.className = 'px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800';
+                    requestBtn.disabled = true;
+                    requestBtn.textContent = 'Đã được cho phép';
+                    sendBtn.disabled = false;
+                    statusCard.className = 'p-4 rounded-lg shadow-inner bg-green-50 flex items-center justify-between';
+                    break;
+                case 'denied':
+                    statusEl.textContent = 'Bị từ chối';
+                    statusEl.className = 'px-3 py-1 text-sm font-medium rounded-full bg-red-100 text-red-800';
+                    requestBtn.disabled = true;
+                    requestBtn.textContent = 'Bị từ chối (Không thể thay đổi)';
+                    sendBtn.disabled = true;
+                    statusCard.className = 'p-4 rounded-lg shadow-inner bg-red-50 flex items-center justify-between';
+                    showMessage("Quyền thông báo đã bị từ chối. Bạn cần thay đổi cài đặt trình duyệt để thử lại.", 'error');
+                    break;
+                case 'default':
+                default:
+                    statusEl.textContent = 'Chưa thiết lập';
+                    statusEl.className = 'px-3 py-1 text-sm font-medium rounded-full bg-yellow-100 text-yellow-800';
+                    requestBtn.disabled = false;
+                    requestBtn.textContent = '1. Yêu cầu Quyền Gửi Thông Báo';
+                    sendBtn.disabled = true;
+                    statusCard.className = 'p-4 rounded-lg shadow-inner bg-yellow-50 flex items-center justify-between';
+                    break;
+            }
+        }
+
+        /**
+         * Hiển thị thông báo tùy chỉnh trên giao diện
+         */
+        function showMessage(message, type) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-800', 'bg-green-100', 'text-green-800');
+
+            if (type === 'success') {
+                messageBox.classList.add('bg-green-100', 'text-green-800');
+            } else if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'text-red-800');
+            }
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 5000);
+        }
+
+        /**
+         * Yêu cầu quyền gửi thông báo từ trình duyệt
+         */
+        async function requestNotificationPermission() {
+            messageBox.classList.add('hidden');
+            if (!('Notification' in window)) {
+                showMessage("Trình duyệt không hỗ trợ Notifications.", 'error');
+                return;
+            }
+
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    showMessage("Yêu cầu quyền thành công! Bạn đã có thể gửi thông báo.", 'success');
+                } else if (permission === 'denied') {
+                    showMessage("Quyền thông báo đã bị từ chối.", 'error');
+                } else {
+                    showMessage("Yêu cầu quyền bị đóng hoặc từ chối.", 'error');
+                }
+                updateUIStatus(); 
+            } catch (error) {
+                console.error("Lỗi khi yêu cầu quyền:", error);
+                showMessage("Đã xảy ra lỗi khi yêu cầu quyền thông báo.", 'error');
+                updateUIStatus();
+            }
+        }
+
+        /**
+         * Gửi một thông báo dựa trên dữ liệu người dùng nhập
+         */
+        function sendNotification() {
+            if (currentPermission !== 'granted') {
+                showMessage("Bạn cần cho phép quyền thông báo trước khi gửi.", 'error');
+                return;
+            }
+
+            const title = document.getElementById('title-input').value || "Thông báo mặc định";
+            const body = document.getElementById('body-input').value || "Nội dung trống, hãy thử điền thêm chi tiết.";
+            const icon = document.getElementById('icon-input').value || null; 
+
+            const options = {
+                body: body,
+                icon: icon, 
+                tag: 'my-unique-tag-' + Date.now(), 
+                renotify: true, 
+                data: {
+                    url: window.location.href
+                }
+            };
+
+            try {
+                const notification = new Notification(title, options);
+                showMessage(`Thông báo "${title}" đã được gửi thành công! Hãy kiểm tra màn hình của bạn.`, 'success');
+
+                notification.onclick = (e) => {
+                    console.log('Thông báo đã được nhấp vào', e.target.data);
+                    e.target.close(); 
+                };
+
+                notification.onerror = (e) => {
+                    console.error('Lỗi thông báo:', e);
+                };
+
+                notification.onclose = () => {
+                    console.log('Thông báo đã bị đóng.');
+                };
+
+            } catch (error) {
+                console.error("Lỗi khi gửi thông báo:", error);
+                showMessage("Lỗi: Không thể gửi thông báo. Vui lòng kiểm tra console.", 'error');
+            }
+        }
+
+        // --- ĐĂNG KÝ SERVICE WORKER (PWA) ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                // Đăng ký sw.js (cần có file sw.js cùng cấp)
+                navigator.serviceWorker.register('sw.js')
+                    .then(registration => {
+                        console.log('Service Worker đã được đăng ký thành công:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('Đăng ký Service Worker thất bại:', error);
+                    });
+            });
+        }
+        
+        // --- KHỞI TẠO CHUNG ---
+        document.addEventListener('DOMContentLoaded', updateUIStatus);
+        
+        if ('permissions' in navigator) {
+            navigator.permissions.query({ name: 'notifications' }).then(permissionStatus => {
+                permissionStatus.onchange = updateUIStatus;
+            }).catch(e => {
+                console.warn("Không thể truy vấn trạng thái quyền Notifications:", e);
+                updateUIStatus();
+            });
+        } else {
+            updateUIStatus();
+        }
+
+    </script>
+</body>
+</html>
+
