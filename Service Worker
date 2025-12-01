@@ -1,0 +1,48 @@
+// sw.js - Service Worker đơn giản cho PWA
+const CACHE_NAME = 'notification-tester-v1';
+const urlsToCache = [
+'./notification_tester.html',
+'./manifest.json',
+// Các URL tĩnh khác nếu có
+];
+​// Sự kiện cài đặt: lưu các tài nguyên vào cache
+self.addEventListener('install', event => {
+event.waitUntil(
+caches.open(CACHE_NAME)
+.then(cache => {
+console.log('Opened cache');
+// Lưu trữ các file cần thiết cho ngoại tuyến
+return cache.addAll(urlsToCache);
+})
+);
+});
+​// Sự kiện fetch: phục vụ tài nguyên từ cache nếu có
+self.addEventListener('fetch', event => {
+event.respondWith(
+caches.match(event.request)
+.then(response => {
+// Trả về tài nguyên từ cache
+if (response) {
+return response;
+}
+// Nếu không có trong cache, fetch từ mạng
+return fetch(event.request);
+})
+);
+});
+​// Sự kiện kích hoạt: dọn dẹp cache cũ (tùy chọn)
+self.addEventListener('activate', event => {
+const cacheWhitelist = [CACHE_NAME];
+event.waitUntil(
+caches.keys().then(cacheNames => {
+return Promise.all(
+cacheNames.map(cacheName => {
+if (cacheWhitelist.indexOf(cacheName) === -1) {
+// Xóa cache không cần thiết
+return caches.delete(cacheName);
+}
+})
+);
+})
+);
+});
